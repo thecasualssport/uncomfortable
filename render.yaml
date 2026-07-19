@@ -15,9 +15,9 @@ services:
       - key: DATABASE_PATH
         value: /var/data/data.db
       - key: FRONTEND_URL
-        value: https://www.uncomfortablecalender.com/
+        value: https://www.uncomfortablecalendar.com/
       - key: GOOGLE_REDIRECT_URI
-        value: https://www.uncomfortablecalender.com/api/auth/google/callback
+        value: https://www.uncomfortablecalendar.com/api/auth/google/callback
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
