@@ -73,6 +73,29 @@
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
+  const CLIENT_ID_KEY = 'uc_client_id';
+
+  // Every visitor needs a stable identity to personalize the daily wheel
+  // with — logged-in accounts already have one (email); guests get a
+  // random id generated once and kept in localStorage so their set of 8
+  // stays the same across a reload but differs from everyone else's.
+  function getClientId() {
+    try {
+      let id = localStorage.getItem(CLIENT_ID_KEY);
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem(CLIENT_ID_KEY, id);
+      }
+      return id;
+    } catch (e) {
+      return 'anon';
+    }
+  }
+
+  function wheelIdentity() {
+    return (state.user && state.user.email) || getClientId();
+  }
+
   function hashStr(str) {
     let h = 2166136261;
     for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -190,6 +213,10 @@
     billingError: '',
     billingBusy: false,
     showSpinLockModal: false,
+    showShareModal: false,
+    shareTitle: '',
+    shareText: '',
+    shareCopied: false,
   };
 
   let adTimerId = null;
@@ -462,8 +489,12 @@
     return streak;
   }
 
+  function personalizedPoolKey() {
+    return dateKey(new Date()) + '|' + wheelIdentity();
+  }
+
   function todaysPool() {
-    return dailyChallenges(dateKey(new Date()));
+    return dailyChallenges(personalizedPoolKey());
   }
 
   // ---------------- DOM refs ----------------
@@ -493,6 +524,7 @@
     accountModal: document.getElementById('accountModal'),
     adModal: document.getElementById('adModal'),
     spinLockModal: document.getElementById('spinLockModal'),
+    shareModal: document.getElementById('shareModal'),
 
     screenAuth: document.getElementById('screen-auth'),
     authTitle: document.getElementById('authTitle'),
@@ -522,7 +554,7 @@
   let labelsBuiltForKey = null;
 
   function buildWheelLabels() {
-    const key = dateKey(new Date());
+    const key = personalizedPoolKey();
     if (labelsBuiltForKey === key) return;
     labelsBuiltForKey = key;
     const pool = todaysPool();
@@ -707,6 +739,75 @@
     render();
   }
 
+  // ---------------- sharing ----------------
+
+  function buildShareUrl() {
+    return 'https://www.uncomfortablecalendar.com/';
+  }
+
+  function buildShareText(challenge, stage) {
+    const url = buildShareUrl();
+    if (stage === 'done') {
+      const streak = computeStreak(state.history);
+      const streakBit = streak > 1 ? ` (${streak}-day streak)` : '';
+      return `I just completed today's Uncomfortable Calendar challenge: "${challenge.title}"${streakBit} 💪\n${url}`;
+    }
+    if (stage === 'failed') {
+      return `Today's Uncomfortable Calendar challenge got the best of me: "${challenge.title}" 😅 Back at it tomorrow.\n${url}`;
+    }
+    return `I just got today's Uncomfortable Calendar challenge: "${challenge.title}" 😬 Wish me luck!\n${url}`;
+  }
+
+  function openShareModal(stage) {
+    const pool = todaysPool();
+    const challenge = pool[state.currentIndex] || pool[0];
+    state.shareTitle = challenge.title;
+    state.shareText = buildShareText(challenge, stage);
+    state.shareCopied = false;
+    state.showShareModal = true;
+    render();
+  }
+
+  function closeShareModal() {
+    state.showShareModal = false;
+    render();
+  }
+
+  async function shareNative() {
+    if (!navigator.share) return;
+    try {
+      await navigator.share({ title: 'Uncomfortable Calendar', text: state.shareText });
+      closeShareModal();
+    } catch (e) {
+      // user cancelled the native share sheet — leave our modal open
+    }
+  }
+
+  function shareViaWhatsapp() {
+    window.open('https://wa.me/?text=' + encodeURIComponent(state.shareText), '_blank', 'noopener');
+  }
+
+  function shareViaFacebook() {
+    const url = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(buildShareUrl()) + '&quote=' + encodeURIComponent(state.shareText);
+    window.open(url, '_blank', 'noopener');
+  }
+
+  function shareViaX() {
+    window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(state.shareText), '_blank', 'noopener');
+  }
+
+  async function copyShareText() {
+    try {
+      await navigator.clipboard.writeText(state.shareText);
+      state.shareCopied = true;
+      render();
+      setTimeout(() => { state.shareCopied = false; render(); }, 1800);
+    } catch (e) {
+      // clipboard API unavailable (e.g. insecure context) — silently no-op,
+      // the WhatsApp/Facebook/X buttons still work either way
+    }
+  }
+
   function goToHome() {
     state.tab = 'home';
     render();
@@ -804,6 +905,31 @@
     startNextSpinCountdown();
   }
 
+  function renderShareModal() {
+    if (!state.showShareModal) { el.shareModal.innerHTML = ''; return; }
+
+    const nativeBtn = (typeof navigator !== 'undefined' && navigator.share)
+      ? `<button class="pill pill-accept" data-action="shareNative">Share via device…</button>`
+      : '';
+
+    el.shareModal.innerHTML = `
+      <div class="day-modal-backdrop" id="shareModalBackdrop">
+        <div class="day-modal share-modal">
+          <div class="day-modal-date">Share</div>
+          <div class="card-title">${escapeHtml(state.shareTitle)}</div>
+          <div class="card-desc share-preview">${escapeHtml(state.shareText)}</div>
+          ${nativeBtn}
+          <div class="share-row">
+            <button class="pill pill-outline" data-action="shareWhatsapp">WhatsApp</button>
+            <button class="pill pill-outline" data-action="shareFacebook">Facebook</button>
+            <button class="pill pill-outline" data-action="shareX">X</button>
+          </div>
+          <button class="pill pill-outline" data-action="shareCopy">${state.shareCopied ? 'Copied!' : 'Copy Text'}</button>
+          <button class="pill pill-outline day-modal-close" data-action="closeShareModal">Close</button>
+        </div>
+      </div>`;
+  }
+
   function stopNextSpinCountdown() {
     if (nextSpinTimerId) { clearInterval(nextSpinTimerId); nextSpinTimerId = null; }
   }
@@ -850,13 +976,23 @@
     if (state.rerollUsedToday) rerollLabel = 'Reroll used';
     else if (!isPremium) rerollLabel = 'Reroll (watch ad)';
 
+    const shareIconBtn = `
+      <button class="icon-btn share-icon-btn" data-action="share" aria-label="Share">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 2v9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M5.5 5.5L9 2l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4 8v6a1 1 0 001 1h8a1 1 0 001-1V8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>`;
+
     let inner = '';
     if (state.stage === 'result') {
       inner = `
         <div class="card-actions">
           <button class="pill pill-accept" data-action="accept">Accept Challenge</button>
           <button class="pill pill-reroll" data-action="reroll" ${state.rerollUsedToday ? 'disabled' : ''}>${escapeHtml(rerollLabel)}</button>
-        </div>`;
+        </div>
+        <div class="secondary-actions">${shareIconBtn}</div>`;
     } else if (state.stage === 'accepted') {
       inner = `
         <div class="stage-block">
@@ -876,6 +1012,7 @@
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
             <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
+          <div class="secondary-actions">${shareIconBtn}</div>
         </div>`;
     } else if (state.stage === 'failed') {
       inner = `
@@ -885,6 +1022,7 @@
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
             <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
+          <div class="secondary-actions">${shareIconBtn}</div>
         </div>`;
     }
 
@@ -968,7 +1106,7 @@
 
     let body;
     if (entry) {
-      const pool = dailyChallenges(key);
+      const pool = dailyChallenges(key + '|' + wheelIdentity());
       const challenge = pool[entry.index] || { title: entry.title, description: '' };
       const kicker = entry.failed ? 'Not Completed' : 'Completed';
       body = `
@@ -1132,6 +1270,7 @@
       el.adModal.innerHTML = '';
       el.spinLockModal.innerHTML = '';
       el.welcomeGateModal.innerHTML = '';
+      el.shareModal.innerHTML = '';
       renderAuth();
       return;
     }
@@ -1164,6 +1303,7 @@
     renderAdModal();
     renderSpinLockModal();
     renderWelcomeGate();
+    renderShareModal();
   }
 
   // ---------------- wire up ----------------
@@ -1189,6 +1329,20 @@
       const challenge = pool[state.currentIndex] || pool[0];
       downloadIcsForChallenge(challenge);
     }
+    else if (action === 'share') openShareModal(state.stage);
+  });
+
+  el.shareModal.addEventListener('click', (e) => {
+    if (e.target.id === 'shareModalBackdrop') { closeShareModal(); return; }
+    const btn = e.target.closest('[data-action]');
+    if (!btn || btn.disabled) return;
+    const action = btn.dataset.action;
+    if (action === 'closeShareModal') closeShareModal();
+    else if (action === 'shareNative') shareNative();
+    else if (action === 'shareWhatsapp') shareViaWhatsapp();
+    else if (action === 'shareFacebook') shareViaFacebook();
+    else if (action === 'shareX') shareViaX();
+    else if (action === 'shareCopy') copyShareText();
   });
 
   el.spinLockModal.addEventListener('click', (e) => {
@@ -1315,6 +1469,7 @@
     if (state.selectedDayKey) closeDayDetail();
     else if (state.showAdInterstitial) closeAdInterstitial(false);
     else if (state.showSpinLockModal) closeSpinLockModal();
+    else if (state.showShareModal) closeShareModal();
     else if (state.showAccountModal) { state.showAccountModal = false; render(); }
   });
 
