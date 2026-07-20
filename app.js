@@ -168,6 +168,8 @@
 
   const state = {
     user: null, // { name, email, provider }
+    isGuest: false,
+    showAuthScreen: false,
     tab: 'home',
     stage: 'idle', // idle | spinning | result | accepted | done | failed
     wheelRotation: 0,
@@ -191,6 +193,32 @@
   };
 
   let adTimerId = null;
+
+  // ---------------- guest (local-only) storage ----------------
+
+  const GUEST_HISTORY_KEY = 'uc_guest_history';
+  const GUEST_REROLL_KEY = 'uc_guest_reroll';
+  const GUEST_MODE_KEY = 'uc_guest_mode';
+
+  function loadGuestHistory() {
+    try { return JSON.parse(localStorage.getItem(GUEST_HISTORY_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveGuestHistory(history) {
+    try { localStorage.setItem(GUEST_HISTORY_KEY, JSON.stringify(history)); } catch (e) {}
+  }
+  function loadGuestReroll() {
+    try { return JSON.parse(localStorage.getItem(GUEST_REROLL_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveGuestReroll(reroll) {
+    try { localStorage.setItem(GUEST_REROLL_KEY, JSON.stringify(reroll)); } catch (e) {}
+  }
+  function clearGuestData() {
+    try {
+      localStorage.removeItem(GUEST_HISTORY_KEY);
+      localStorage.removeItem(GUEST_REROLL_KEY);
+      localStorage.removeItem(GUEST_MODE_KEY);
+    } catch (e) {}
+  }
 
   // ---------------- backend API ----------------
 
@@ -282,16 +310,80 @@
     state.selectedDayKey = null;
   }
 
+  function loadGuestUserData() {
+    const today = dateKey(new Date());
+    state.history = loadGuestHistory();
+    state.rerollByDate = loadGuestReroll();
+    state.rerollUsedToday = !!state.rerollByDate[today];
+    state.stage = 'idle';
+    state.currentIndex = 0;
+    const entry = state.history[today];
+    if (entry) {
+      state.stage = entry.failed ? 'failed' : 'done';
+      state.currentIndex = entry.index || 0;
+    }
+    state.tab = 'home';
+    state.viewYear = new Date().getFullYear();
+    state.viewMonth = new Date().getMonth();
+    state.selectedDayKey = null;
+  }
+
+  function enterGuestMode() {
+    state.isGuest = true;
+    state.showAuthScreen = false;
+    try { localStorage.setItem(GUEST_MODE_KEY, '1'); } catch (e) {}
+    loadGuestUserData();
+  }
+
+  // Carries a guest's local progress into their new/existing account once they
+  // sign up or log in, so trying the wheel first never costs them their streak.
+  // Only fills in days the server doesn't already have — never overwrites real
+  // account history with local guest data.
+  async function migrateGuestDataIfAny() {
+    const guestHistory = loadGuestHistory();
+    const guestReroll = loadGuestReroll();
+    const historyKeys = Object.keys(guestHistory);
+    const rerollKeys = Object.keys(guestReroll);
+    if (!historyKeys.length && !rerollKeys.length) return;
+
+    try {
+      const data = await fetchHistory();
+      const serverHistory = data.history || {};
+      const serverReroll = data.rerollByDate || {};
+      for (const key of historyKeys) {
+        if (serverHistory[key]) continue;
+        const entry = guestHistory[key];
+        try { await postDay(key, entry.index, entry.title, entry.failed); } catch (e) {}
+      }
+      for (const key of rerollKeys) {
+        if (!guestReroll[key] || serverReroll[key]) continue;
+        try { await postReroll(key); } catch (e) {}
+      }
+    } catch (e) {
+      // best effort — don't block sign-in over a failed migration
+    } finally {
+      clearGuestData();
+    }
+  }
+
   async function init() {
     try {
       const user = await fetchSession();
       if (user) {
         state.user = user;
+        await migrateGuestDataIfAny();
         await loadUserData();
+        return;
       }
     } catch (e) {
       state.authError = e.message;
     }
+    try {
+      if (localStorage.getItem(GUEST_MODE_KEY) === '1') {
+        state.isGuest = true;
+        loadGuestUserData();
+      }
+    } catch (e) {}
   }
 
   function consumeAuthErrorFromUrl() {
@@ -338,6 +430,8 @@
     clearInterval(adTimerId);
     stopNextSpinCountdown();
     state.user = null;
+    state.isGuest = false;
+    state.showAuthScreen = false;
     state.history = {};
     state.rerollByDate = {};
     state.stage = 'idle';
@@ -418,6 +512,9 @@
     accountAvatar: document.getElementById('accountAvatar'),
     accountGreeting: document.getElementById('accountGreeting'),
     signOutBtn: document.getElementById('signOutBtn'),
+    guestSignInBtn: document.getElementById('guestSignInBtn'),
+    authBackBtn: document.getElementById('authBackBtn'),
+    welcomeGateModal: document.getElementById('welcomeGateModal'),
   };
 
   let labelsBuiltForKey = null;
@@ -472,14 +569,19 @@
     if (state.rerollUsedToday) return;
     state.resultError = '';
     const today = dateKey(new Date());
-    try {
-      await postReroll(today);
-    } catch (e) {
-      state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
-      render();
-      return;
+    if (state.isGuest) {
+      state.rerollByDate = { ...state.rerollByDate, [today]: true };
+      saveGuestReroll(state.rerollByDate);
+    } else {
+      try {
+        await postReroll(today);
+      } catch (e) {
+        state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
+        render();
+        return;
+      }
+      state.rerollByDate = { ...state.rerollByDate, [today]: true };
     }
-    state.rerollByDate = { ...state.rerollByDate, [today]: true };
     state.rerollUsedToday = true;
     state.stage = 'idle';
     render();
@@ -515,6 +617,13 @@
   }
 
   async function startUpgrade() {
+    if (!state.user) {
+      state.showAuthScreen = true;
+      state.authMode = 'signup';
+      state.authError = 'Create a free account first, then you can go ad-free.';
+      render();
+      return;
+    }
     if (state.billingBusy) return;
     state.billingBusy = true;
     state.billingError = '';
@@ -549,14 +658,20 @@
     const pool = todaysPool();
     const title = pool[state.currentIndex].title;
     state.resultError = '';
-    try {
-      await postDay(today, state.currentIndex, title, false);
-    } catch (e) {
-      state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
-      render();
-      return;
+    const entry = { index: state.currentIndex, title, failed: false };
+    if (state.isGuest) {
+      state.history = { ...state.history, [today]: entry };
+      saveGuestHistory(state.history);
+    } else {
+      try {
+        await postDay(today, state.currentIndex, title, false);
+      } catch (e) {
+        state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
+        render();
+        return;
+      }
+      state.history = { ...state.history, [today]: entry };
     }
-    state.history = { ...state.history, [today]: { index: state.currentIndex, title, failed: false } };
     state.stage = 'done';
     render();
   }
@@ -566,14 +681,20 @@
     const pool = todaysPool();
     const title = pool[state.currentIndex].title;
     state.resultError = '';
-    try {
-      await postDay(today, state.currentIndex, title, true);
-    } catch (e) {
-      state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
-      render();
-      return;
+    const entry = { index: state.currentIndex, title, failed: true };
+    if (state.isGuest) {
+      state.history = { ...state.history, [today]: entry };
+      saveGuestHistory(state.history);
+    } else {
+      try {
+        await postDay(today, state.currentIndex, title, true);
+      } catch (e) {
+        state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
+        render();
+        return;
+      }
+      state.history = { ...state.history, [today]: entry };
     }
-    state.history = { ...state.history, [today]: { index: state.currentIndex, title, failed: true } };
     state.stage = 'failed';
     render();
   }
@@ -787,7 +908,7 @@
 
   function renderCalendar() {
     if (state.tab !== 'calendar') return;
-    el.calTitle.textContent = `${firstNameOf(state.user)}’s Streak`;
+    el.calTitle.textContent = state.user ? `${firstNameOf(state.user)}’s Streak` : 'Your Streak';
     const streak = computeStreak(state.history);
     const totalCompleted = Object.keys(state.history).length;
     el.calStreak.textContent = String(streak);
@@ -982,8 +1103,29 @@
     }
   }
 
+  function renderWelcomeGate() {
+    if (state.user || state.isGuest) { el.welcomeGateModal.innerHTML = ''; return; }
+    el.welcomeGateModal.innerHTML = `
+      <div class="day-modal-backdrop">
+        <div class="day-modal welcome-gate">
+          <svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" aria-hidden="true">
+            <circle cx="24" cy="24" r="22" fill="none" stroke="var(--color-divider)" stroke-width="1.5"/>
+            <path d="M24 24 L24 3 A21 21 0 0 1 42.2 33 Z" fill="var(--color-accent-200)"/>
+            <path d="M24 24 L42.2 33 A21 21 0 0 1 5.8 33 Z" fill="var(--color-accent-2-200)"/>
+            <path d="M24 24 L5.8 33 A21 21 0 0 1 24 3 Z" fill="var(--color-neutral-200)"/>
+            <circle cx="24" cy="24" r="7" fill="var(--color-bg)"/>
+          </svg>
+          <div class="brand-line1">Uncomfortable</div>
+          <div class="brand-line2">Calendar</div>
+          <p class="card-desc">One challenge a day. Spin now — no account needed.</p>
+          <button class="pill pill-accept" data-action="gateSignIn">Sign Up / Log In</button>
+          <button class="pill pill-outline" data-action="gateGuest">Continue as Guest</button>
+        </div>
+      </div>`;
+  }
+
   function render() {
-    if (!state.user) {
+    if (!state.user && state.showAuthScreen) {
       el.screenAuth.hidden = false;
       el.accountBar.hidden = true;
       el.screenHome.hidden = true;
@@ -993,6 +1135,7 @@
       el.accountModal.innerHTML = '';
       el.adModal.innerHTML = '';
       el.spinLockModal.innerHTML = '';
+      el.welcomeGateModal.innerHTML = '';
       renderAuth();
       return;
     }
@@ -1000,7 +1143,18 @@
     el.screenAuth.hidden = true;
     el.accountBar.hidden = false;
     el.tabBar.hidden = false;
-    renderAccountBar();
+
+    if (state.user) {
+      el.accountChip.hidden = false;
+      el.signOutBtn.hidden = false;
+      el.guestSignInBtn.hidden = true;
+      renderAccountBar();
+    } else {
+      el.accountChip.hidden = true;
+      el.signOutBtn.hidden = true;
+      el.guestSignInBtn.hidden = false;
+    }
+
     renderTabs();
     if (state.tab === 'home') {
       renderHeader();
@@ -1013,6 +1167,7 @@
     renderAccountModal();
     renderAdModal();
     renderSpinLockModal();
+    renderWelcomeGate();
   }
 
   // ---------------- wire up ----------------
@@ -1102,8 +1257,11 @@
         ? await apiSignUp(name, email, password)
         : await apiSignIn(email, password);
       state.user = user;
+      state.isGuest = false;
+      state.showAuthScreen = false;
       state.authError = '';
       el.authForm.reset();
+      await migrateGuestDataIfAny();
       await loadUserData();
     } catch (err) {
       state.authError = err.message;
@@ -1113,6 +1271,24 @@
   });
 
   el.signOutBtn.addEventListener('click', signOut);
+
+  el.authBackBtn.addEventListener('click', () => {
+    state.showAuthScreen = false;
+    state.authError = '';
+    render();
+  });
+
+  el.guestSignInBtn.addEventListener('click', () => {
+    state.showAuthScreen = true;
+    render();
+  });
+
+  el.welcomeGateModal.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'gateSignIn') { state.showAuthScreen = true; render(); }
+    else if (btn.dataset.action === 'gateGuest') { enterGuestMode(); render(); }
+  });
 
   el.accountChip.addEventListener('click', () => {
     state.showAccountModal = true;

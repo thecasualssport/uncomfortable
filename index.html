@@ -70,6 +70,10 @@
         <span id="authSwitchText">Don't have an account?</span>
         <button type="button" id="authSwitchBtn" class="link-btn">Sign up</button>
       </p>
+
+      <p class="auth-switch">
+        <button type="button" id="authBackBtn" class="link-btn">‹ Continue as Guest</button>
+      </p>
     </div>
   </main>
 
@@ -79,6 +83,7 @@
       <span class="account-greeting" id="accountGreeting"></span>
     </button>
     <button class="account-signout" id="signOutBtn" type="button">Sign out</button>
+    <button class="pill pill-outline guest-signin-btn" id="guestSignInBtn" type="button" hidden>Sign Up / Log In</button>
   </div>
 
   <main id="screen-home" class="screen" hidden>
@@ -155,6 +160,7 @@
   <div id="accountModal" class="day-modal-slot"></div>
   <div id="adModal" class="day-modal-slot"></div>
   <div id="spinLockModal" class="day-modal-slot"></div>
+  <div id="welcomeGateModal" class="day-modal-slot"></div>
 
   <nav id="tabBar" class="tab-bar">
     <button id="tabHome" class="tab-btn" type="button">
