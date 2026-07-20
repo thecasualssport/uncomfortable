@@ -75,11 +75,6 @@ button:not(:disabled) { cursor: pointer; }
 }
 .screen[hidden] { display: none; }
 
-.page-logo {
-  display: block;
-  margin: 0 auto 14px;
-}
-
 /* ---------- home screen ---------- */
 
 .home-header {
@@ -594,6 +589,13 @@ button:not(:disabled) { cursor: pointer; }
   padding: 10px 24px 0;
 }
 .account-bar[hidden] { display: none; }
+.account-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.header-logo { flex-shrink: 0; display: block; }
 .account-chip {
   display: flex;
   align-items: center;
@@ -643,7 +645,6 @@ button:not(:disabled) { cursor: pointer; }
 }
 .guest-signin-btn {
   flex-shrink: 0;
-  margin-left: auto;
   padding: 7px 16px;
   font-size: 12.5px;
 }

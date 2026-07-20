@@ -86,16 +86,18 @@
   </main>
 
   <div id="accountBar" class="account-bar" hidden>
-    <button class="account-chip" id="accountChip" type="button">
-      <span class="account-avatar" id="accountAvatar"></span>
-      <span class="account-greeting" id="accountGreeting"></span>
-    </button>
+    <div class="account-bar-left">
+      <img class="header-logo" src="/logo.svg" alt="Uncomfortable Calendar" width="30" height="30">
+      <button class="account-chip" id="accountChip" type="button">
+        <span class="account-avatar" id="accountAvatar"></span>
+        <span class="account-greeting" id="accountGreeting"></span>
+      </button>
+    </div>
     <button class="account-signout" id="signOutBtn" type="button">Sign out</button>
     <button class="pill pill-outline guest-signin-btn" id="guestSignInBtn" type="button" hidden>Sign Up / Log In</button>
   </div>
 
   <main id="screen-home" class="screen" hidden>
-    <img class="page-logo" src="/logo.svg" alt="Uncomfortable Calendar" width="40" height="40">
     <header class="home-header">
       <div class="brand">
         <div class="brand-line1">Uncomfortable</div>
@@ -130,7 +132,6 @@
   </main>
 
   <main id="screen-calendar" class="screen" hidden>
-    <img class="page-logo" src="/logo.svg" alt="Uncomfortable Calendar" width="40" height="40">
     <h2 id="calTitle" class="cal-title">Your Streak</h2>
 
     <div class="stat-row">
