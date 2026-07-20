@@ -20,16 +20,29 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # .claude/launch.json whose cwd is a sibling project folder).
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = os.environ.get('GOOGLE_CLIENT_SECRET')
-GOOGLE_REDIRECT_URI = os.environ.get('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/auth/google/callback')
-FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:5050/')
-SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
+def _env(name, default=None):
+    # Copy-pasting secrets into a dashboard (Render, etc.) from a rendered
+    # chat table or similar can silently introduce leading/trailing
+    # whitespace or non-breaking spaces. Since these values end up in HTTP
+    # headers (e.g. Stripe's Authorization: Bearer <key>), stray whitespace
+    # causes an unhelpful UnicodeEncodeError deep in the HTTP client rather
+    # than a clear "bad credential" error — strip defensively at the source.
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip()
 
-STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
-STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY')
-STRIPE_PRICE_ID = os.environ.get('STRIPE_PRICE_ID')
-STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET')
+
+GOOGLE_CLIENT_ID = _env('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = _env('GOOGLE_CLIENT_SECRET')
+GOOGLE_REDIRECT_URI = _env('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/auth/google/callback')
+FRONTEND_URL = _env('FRONTEND_URL', 'http://localhost:5050/')
+SECRET_KEY = _env('SECRET_KEY') or secrets.token_hex(32)
+
+STRIPE_SECRET_KEY = _env('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = _env('STRIPE_PUBLISHABLE_KEY')
+STRIPE_PRICE_ID = _env('STRIPE_PRICE_ID')
+STRIPE_WEBHOOK_SECRET = _env('STRIPE_WEBHOOK_SECRET')
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
@@ -351,11 +364,8 @@ def billing_create_checkout_session():
         )
     except stripe.error.StripeError as e:
         return jsonify({'error': str(e.user_message or e)}), 400
-    except Exception as e:
-        # TEMPORARY: surfacing real exception details to diagnose a
-        # production-only 500 that doesn't reproduce locally. Revert to a
-        # generic message once root-caused.
-        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
+    except Exception:
+        return jsonify({'error': 'Could not start checkout — please try again in a moment.'}), 500
 
     return jsonify({'url': checkout_session.url})
 
