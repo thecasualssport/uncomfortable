@@ -822,8 +822,37 @@
       </div>`;
   }
 
+  let adModalSessionOpen = false;
+
+  function updateAdCountdownDom() {
+    const secondsLeft = state.adSecondsLeft;
+    const continueLabel = secondsLeft > 0 ? `Continue in ${secondsLeft}s` : 'Continue to Challenge';
+    const btn = el.adModal.querySelector('[data-action="continueAd"]');
+    if (btn) {
+      btn.textContent = continueLabel;
+      btn.disabled = secondsLeft > 0;
+    }
+  }
+
   function renderAdModal() {
-    if (!state.showAdInterstitial) { el.adModal.innerHTML = ''; return; }
+    if (!state.showAdInterstitial) {
+      el.adModal.innerHTML = '';
+      adModalSessionOpen = false;
+      return;
+    }
+
+    // The countdown ticks via the main render() loop once a second. Rebuilding
+    // this modal's innerHTML on every tick would recreate the <ins> ad element
+    // each time, forcing AdSense to re-request an ad every second — broken UX
+    // and a real risk of the account getting flagged for invalid traffic. So
+    // the ad markup is built exactly once per "open"; ticks after that only
+    // patch the countdown text/button directly.
+    if (adModalSessionOpen) {
+      updateAdCountdownDom();
+      return;
+    }
+    adModalSessionOpen = true;
+
     const secondsLeft = state.adSecondsLeft;
     const continueLabel = secondsLeft > 0 ? `Continue in ${secondsLeft}s` : 'Continue to Challenge';
 
@@ -832,15 +861,25 @@
         <div class="day-modal ad-modal">
           <div class="ad-modal-label">Advertisement</div>
           <div class="ad-modal-content">
-            <div class="ad-modal-badge">SPONSORED</div>
-            <div class="ad-modal-title">Your Ad Could Be Here</div>
-            <div class="ad-modal-desc">This is a placeholder ad slot — a real ad network isn't connected yet.</div>
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="ca-pub-8922964802782980"
+                 data-ad-slot="5307486358"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
           </div>
-          <div class="ad-modal-note">Free plan shows a placeholder ad before each reroll.</div>
+          <div class="ad-modal-note">Free plan shows an ad before each reroll.</div>
           <button class="pill pill-outline" data-action="upgradeFromAd">Skip ads — Go Ad-Free for $3.49/mo</button>
           <button class="pill pill-accept ad-modal-continue" data-action="continueAd" ${secondsLeft > 0 ? 'disabled' : ''}>${escapeHtml(continueLabel)}</button>
         </div>
       </div>`;
+
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (e) {
+      // AdSense script may not be loaded yet (blocked, offline, ad blocker) —
+      // the modal still works, it just won't show a filled ad.
+    }
   }
 
   function render() {
