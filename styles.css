@@ -75,6 +75,11 @@ button:not(:disabled) { cursor: pointer; }
 }
 .screen[hidden] { display: none; }
 
+.page-logo {
+  display: block;
+  margin: 0 auto 14px;
+}
+
 /* ---------- home screen ---------- */
 
 .home-header {

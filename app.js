@@ -1110,13 +1110,7 @@
     el.welcomeGateModal.innerHTML = `
       <div class="day-modal-backdrop">
         <div class="day-modal welcome-gate">
-          <svg class="brand-mark" width="44" height="44" viewBox="0 0 48 48" aria-hidden="true">
-            <circle cx="24" cy="24" r="22" fill="none" stroke="var(--color-divider)" stroke-width="1.5"/>
-            <path d="M24 24 L24 3 A21 21 0 0 1 42.2 33 Z" fill="var(--color-accent-200)"/>
-            <path d="M24 24 L42.2 33 A21 21 0 0 1 5.8 33 Z" fill="var(--color-accent-2-200)"/>
-            <path d="M24 24 L5.8 33 A21 21 0 0 1 24 3 Z" fill="var(--color-neutral-200)"/>
-            <circle cx="24" cy="24" r="7" fill="var(--color-bg)"/>
-          </svg>
+          <img class="brand-mark" src="/logo.svg" alt="" width="44" height="44">
           <div class="brand-line1">Uncomfortable</div>
           <div class="brand-line2">Calendar</div>
           <p class="card-desc">One challenge a day. Spin now — no account needed.</p>
