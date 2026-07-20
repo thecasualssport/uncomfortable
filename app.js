@@ -102,6 +102,68 @@
     return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // ---------------- calendar export (.ics) ----------------
+  //
+  // Generates a standard iCalendar file with a reminder alarm, which any
+  // calendar app (Apple Calendar, Google Calendar, Outlook, etc.) can
+  // import — the reminder then surfaces as a real OS notification,
+  // including the lock screen, via that calendar app's own alert system.
+  // This works everywhere without needing extra OAuth scopes or a
+  // provider-specific integration.
+
+  function icsEscape(str) {
+    return String(str)
+      .replace(/\\/g, '\\\\')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,')
+      .replace(/\n/g, '\\n');
+  }
+
+  function formatIcsUtc(date) {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  }
+
+  function buildIcsContent(challenge) {
+    const now = new Date();
+    const start = new Date(now.getTime() + 2 * 60 * 60 * 1000); // remind in 2 hours
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    const uid = 'uncomfortable-' + now.getTime() + '-' + Math.random().toString(36).slice(2) + '@uncomfortablecalendar.com';
+
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Uncomfortable Calendar//EN',
+      'CALSCALE:GREGORIAN',
+      'BEGIN:VEVENT',
+      'UID:' + uid,
+      'DTSTAMP:' + formatIcsUtc(now),
+      'DTSTART:' + formatIcsUtc(start),
+      'DTEND:' + formatIcsUtc(end),
+      'SUMMARY:' + icsEscape('Uncomfortable Challenge: ' + challenge.title),
+      'DESCRIPTION:' + icsEscape(challenge.description),
+      'BEGIN:VALARM',
+      'ACTION:DISPLAY',
+      'DESCRIPTION:' + icsEscape(challenge.title),
+      'TRIGGER:-PT0M',
+      'END:VALARM',
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ];
+    return lines.join('\r\n');
+  }
+
+  function downloadIcsForChallenge(challenge) {
+    const blob = new Blob([buildIcsContent(challenge)], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'uncomfortable-challenge.ics';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   // ---------------- state ----------------
 
   const state = {
@@ -125,6 +187,7 @@
     adSecondsLeft: 5,
     billingError: '',
     billingBusy: false,
+    showSpinLockModal: false,
   };
 
   let adTimerId = null;
@@ -286,6 +349,7 @@
     state.showAdInterstitial = false;
     state.billingError = '';
     state.billingBusy = false;
+    state.showSpinLockModal = false;
     render();
   }
 
@@ -331,6 +395,7 @@
     dayModal: document.getElementById('dayModal'),
     accountModal: document.getElementById('accountModal'),
     adModal: document.getElementById('adModal'),
+    spinLockModal: document.getElementById('spinLockModal'),
 
     screenAuth: document.getElementById('screen-auth'),
     authTitle: document.getElementById('authTitle'),
@@ -372,6 +437,10 @@
 
   function handleSpin() {
     if (state.stage === 'spinning') return;
+    if (state.history[dateKey(new Date())]) {
+      openSpinLockModal();
+      return;
+    }
     state.resultError = '';
     const pool = todaysPool();
     const targetIndex = Math.floor(Math.random() * pool.length);
@@ -508,6 +577,12 @@
     render();
   }
 
+  function handleReturnToWheel() {
+    state.resultError = '';
+    state.stage = 'idle';
+    render();
+  }
+
   function goToHome() {
     state.tab = 'home';
     render();
@@ -574,12 +649,34 @@
     return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
   }
 
-  function nextSpinLockHtml() {
-    return `
-      <div class="next-spin-lock">
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.2a2.5 2.5 0 015 0V6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        <span>Next spin in <strong id="nextSpinTime">--:--:--</strong></span>
+  function openSpinLockModal() {
+    state.showSpinLockModal = true;
+    render();
+  }
+
+  function closeSpinLockModal() {
+    stopNextSpinCountdown();
+    state.showSpinLockModal = false;
+    render();
+  }
+
+  function renderSpinLockModal() {
+    if (!state.showSpinLockModal) { el.spinLockModal.innerHTML = ''; return; }
+
+    el.spinLockModal.innerHTML = `
+      <div class="day-modal-backdrop" id="spinLockBackdrop">
+        <div class="day-modal">
+          <div class="next-spin-lock">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.2a2.5 2.5 0 015 0V6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+            <span>Already spun today</span>
+          </div>
+          <div class="card-title">Next spin in <span id="nextSpinTime">--:--:--</span></div>
+          <div class="card-desc">You've already faced today's challenge. Come back after midnight for a new one.</div>
+          <button class="pill pill-outline day-modal-close" data-action="closeSpinLockModal">Close</button>
+        </div>
       </div>`;
+
+    startNextSpinCountdown();
   }
 
   function stopNextSpinCountdown() {
@@ -641,6 +738,7 @@
           <div class="stage-progress-label">IN PROGRESS — go do it now</div>
           <button class="pill pill-complete" data-action="complete">Mark Complete</button>
           <button class="pill pill-fail" data-action="fail">Unsuccessful</button>
+          <button class="pill pill-outline" data-action="addToCalendar">Add reminder to Calendar</button>
         </div>`;
     } else if (state.stage === 'done') {
       inner = `
@@ -651,8 +749,8 @@
           </div>
           <div class="done-actions">
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
+            <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
-          ${nextSpinLockHtml()}
         </div>`;
     } else if (state.stage === 'failed') {
       inner = `
@@ -660,8 +758,8 @@
           <div class="failed-label">Not today. That's alright — try again tomorrow.</div>
           <div class="failed-actions">
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
+            <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
-          ${nextSpinLockHtml()}
         </div>`;
     }
 
@@ -892,6 +990,7 @@
       el.dayModal.innerHTML = '';
       el.accountModal.innerHTML = '';
       el.adModal.innerHTML = '';
+      el.spinLockModal.innerHTML = '';
       renderAuth();
       return;
     }
@@ -911,6 +1010,7 @@
     renderDayModal();
     renderAccountModal();
     renderAdModal();
+    renderSpinLockModal();
   }
 
   // ---------------- wire up ----------------
@@ -930,6 +1030,18 @@
     else if (action === 'complete') handleComplete();
     else if (action === 'fail') handleFail();
     else if (action === 'goToCalendar') goToCalendar();
+    else if (action === 'returnToWheel') handleReturnToWheel();
+    else if (action === 'addToCalendar') {
+      const pool = todaysPool();
+      const challenge = pool[state.currentIndex] || pool[0];
+      downloadIcsForChallenge(challenge);
+    }
+  });
+
+  el.spinLockModal.addEventListener('click', (e) => {
+    if (e.target.id === 'spinLockBackdrop') { closeSpinLockModal(); return; }
+    const btn = e.target.closest('[data-action="closeSpinLockModal"]');
+    if (btn) closeSpinLockModal();
   });
 
   el.calGrid.addEventListener('click', (e) => {
@@ -1028,6 +1140,7 @@
     if (e.key !== 'Escape') return;
     if (state.selectedDayKey) closeDayDetail();
     else if (state.showAdInterstitial) closeAdInterstitial(false);
+    else if (state.showSpinLockModal) closeSpinLockModal();
     else if (state.showAccountModal) { state.showAccountModal = false; render(); }
   });
 
