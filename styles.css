@@ -135,12 +135,12 @@ button:not(:disabled) { cursor: pointer; }
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 .guest-streak-note {
-  display: block;
-  margin-top: 6px;
+  align-self: center;
+  margin: 14px 0 20px;
   background: none;
   border: none;
-  padding: 0;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 12.5px;
   color: var(--color-accent-700);
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -385,10 +385,10 @@ button:not(:disabled) { cursor: pointer; }
   align-items: center;
   gap: 6px;
   width: auto;
-  color: var(--color-accent-700);
-  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border-color: transparent;
 }
-.share-btn:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); border-color: var(--color-accent); }
 
 /* ---------- share modal ---------- */
 
