@@ -977,12 +977,13 @@
     else if (!isPremium) rerollLabel = 'Reroll (watch ad)';
 
     const shareIconBtn = `
-      <button class="icon-btn share-icon-btn" data-action="share" aria-label="Share">
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <button class="pill pill-outline share-btn" data-action="share">
+        <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
           <path d="M9 2v9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           <path d="M5.5 5.5L9 2l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M4 8v6a1 1 0 001 1h8a1 1 0 001-1V8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
+        <span>Share</span>
       </button>`;
 
     let inner = '';
