@@ -331,16 +331,16 @@ def billing_create_checkout_session():
     if not STRIPE_SECRET_KEY or not STRIPE_PRICE_ID:
         return jsonify({'error': 'Billing is not configured on the server yet.'}), 500
 
-    customer_id = user['stripe_customer_id']
-    if not customer_id:
-        customer = stripe.Customer.create(email=user['email'], name=user['name'])
-        customer_id = customer.id
-        conn = get_db()
-        conn.execute('UPDATE users SET stripe_customer_id = ? WHERE id = ?', (customer_id, user['id']))
-        conn.commit()
-        conn.close()
-
     try:
+        customer_id = user['stripe_customer_id']
+        if not customer_id:
+            customer = stripe.Customer.create(email=user['email'], name=user['name'])
+            customer_id = customer.id
+            conn = get_db()
+            conn.execute('UPDATE users SET stripe_customer_id = ? WHERE id = ?', (customer_id, user['id']))
+            conn.commit()
+            conn.close()
+
         checkout_session = stripe.checkout.Session.create(
             mode='subscription',
             customer=customer_id,
@@ -351,6 +351,11 @@ def billing_create_checkout_session():
         )
     except stripe.error.StripeError as e:
         return jsonify({'error': str(e.user_message or e)}), 400
+    except Exception as e:
+        # TEMPORARY: surfacing real exception details to diagnose a
+        # production-only 500 that doesn't reproduce locally. Revert to a
+        # generic message once root-caused.
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
 
     return jsonify({'url': checkout_session.url})
 
