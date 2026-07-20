@@ -21,28 +21,38 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 def _env(name, default=None):
-    # Copy-pasting secrets into a dashboard (Render, etc.) from a rendered
-    # chat table or similar can silently introduce leading/trailing
-    # whitespace or non-breaking spaces. Since these values end up in HTTP
-    # headers (e.g. Stripe's Authorization: Bearer <key>), stray whitespace
-    # causes an unhelpful UnicodeEncodeError deep in the HTTP client rather
-    # than a clear "bad credential" error — strip defensively at the source.
     value = os.environ.get(name)
     if value is None:
         return default
     return value.strip()
 
 
-GOOGLE_CLIENT_ID = _env('GOOGLE_CLIENT_ID')
-GOOGLE_CLIENT_SECRET = _env('GOOGLE_CLIENT_SECRET')
+def _env_secret(name, default=None):
+    # Copy-pasting credentials into a dashboard (Render, etc.) from a
+    # rendered chat table or similar can silently introduce a non-breaking
+    # space or other invisible character ANYWHERE in the value, not just
+    # the edges — plain .strip() only catches leading/trailing whitespace.
+    # These values end up in HTTP headers (e.g. Stripe's Authorization:
+    # Bearer <key>), where any non-ASCII byte causes an unhelpful
+    # UnicodeEncodeError deep in the HTTP client rather than a clear
+    # "bad credential" error. None of these are ever legitimately
+    # non-ASCII, so drop any stray byte outside plain ASCII wherever it is.
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.encode('ascii', 'ignore').decode('ascii').strip()
+
+
+GOOGLE_CLIENT_ID = _env_secret('GOOGLE_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = _env_secret('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = _env('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/auth/google/callback')
 FRONTEND_URL = _env('FRONTEND_URL', 'http://localhost:5050/')
-SECRET_KEY = _env('SECRET_KEY') or secrets.token_hex(32)
+SECRET_KEY = _env_secret('SECRET_KEY') or secrets.token_hex(32)
 
-STRIPE_SECRET_KEY = _env('STRIPE_SECRET_KEY')
-STRIPE_PUBLISHABLE_KEY = _env('STRIPE_PUBLISHABLE_KEY')
-STRIPE_PRICE_ID = _env('STRIPE_PRICE_ID')
-STRIPE_WEBHOOK_SECRET = _env('STRIPE_WEBHOOK_SECRET')
+STRIPE_SECRET_KEY = _env_secret('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = _env_secret('STRIPE_PUBLISHABLE_KEY')
+STRIPE_PRICE_ID = _env_secret('STRIPE_PRICE_ID')
+STRIPE_WEBHOOK_SECRET = _env_secret('STRIPE_WEBHOOK_SECRET')
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
