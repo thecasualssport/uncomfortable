@@ -376,6 +376,7 @@
     screenHome: document.getElementById('screen-home'),
     screenCalendar: document.getElementById('screen-calendar'),
     streakNum: document.getElementById('streakNum'),
+    streakFlame: document.getElementById('streakFlame'),
     coachLine: document.getElementById('coachLine'),
     wheelWrap: document.getElementById('wheelWrap'),
     wheel: document.getElementById('wheel'),
@@ -622,6 +623,7 @@
   function renderHeader() {
     const streak = computeStreak(state.history);
     el.streakNum.textContent = String(streak);
+    el.streakFlame.classList.toggle('is-lit', streak > 0);
     const firstName = firstNameOf(state.user);
 
     let coachLine = `${firstName}, spin to find today’s edge.`;
