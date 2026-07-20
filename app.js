@@ -216,6 +216,7 @@
     showShareModal: false,
     shareTitle: '',
     shareText: '',
+    shareStage: '',
     shareCopied: false,
   };
 
@@ -746,6 +747,19 @@
     return 'https://www.uncomfortablecalendar.com/';
   }
 
+  // Reports to GA4's standard "share" event (Reports > Engagement > Events in
+  // the GA dashboard) so shares are visible without any extra GA config.
+  // `stage` (result/done/failed) becomes content_type so you can see which
+  // moment people share from, not just how many shares happen overall.
+  function trackShare(method, stage) {
+    if (typeof gtag !== 'function') return;
+    gtag('event', 'share', {
+      method: method,
+      content_type: stage || 'unknown',
+      item_id: state.shareTitle || '',
+    });
+  }
+
   function buildShareText(challenge, stage) {
     const url = buildShareUrl();
     if (stage === 'done') {
@@ -764,6 +778,7 @@
     const challenge = pool[state.currentIndex] || pool[0];
     state.shareTitle = challenge.title;
     state.shareText = buildShareText(challenge, stage);
+    state.shareStage = stage;
     state.shareCopied = false;
     state.showShareModal = true;
     render();
@@ -778,6 +793,7 @@
     if (!navigator.share) return;
     try {
       await navigator.share({ title: 'Uncomfortable Calendar', text: state.shareText });
+      trackShare('native', state.shareStage);
       closeShareModal();
     } catch (e) {
       // user cancelled the native share sheet — leave our modal open
@@ -785,21 +801,25 @@
   }
 
   function shareViaWhatsapp() {
+    trackShare('whatsapp', state.shareStage);
     window.open('https://wa.me/?text=' + encodeURIComponent(state.shareText), '_blank', 'noopener');
   }
 
   function shareViaFacebook() {
+    trackShare('facebook', state.shareStage);
     const url = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(buildShareUrl()) + '&quote=' + encodeURIComponent(state.shareText);
     window.open(url, '_blank', 'noopener');
   }
 
   function shareViaX() {
+    trackShare('x', state.shareStage);
     window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(state.shareText), '_blank', 'noopener');
   }
 
   async function copyShareText() {
     try {
       await navigator.clipboard.writeText(state.shareText);
+      trackShare('copy', state.shareStage);
       state.shareCopied = true;
       render();
       setTimeout(() => { state.shareCopied = false; render(); }, 1800);
