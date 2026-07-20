@@ -549,6 +549,7 @@
     guestSignInBtn: document.getElementById('guestSignInBtn'),
     authBackBtn: document.getElementById('authBackBtn'),
     welcomeGateModal: document.getElementById('welcomeGateModal'),
+    guestStreakNote: document.getElementById('guestStreakNote'),
   };
 
   let labelsBuiltForKey = null;
@@ -848,6 +849,7 @@
     const streak = computeStreak(state.history);
     el.streakNum.textContent = String(streak);
     el.streakFlame.classList.toggle('is-lit', streak > 0);
+    el.guestStreakNote.hidden = !state.isGuest;
     const firstName = firstNameOf(state.user);
 
     let coachLine = `${firstName}, spin to find today’s edge.`;
@@ -1430,6 +1432,11 @@
   });
 
   el.guestSignInBtn.addEventListener('click', () => {
+    state.showAuthScreen = true;
+    render();
+  });
+
+  el.guestStreakNote.addEventListener('click', () => {
     state.showAuthScreen = true;
     render();
   });

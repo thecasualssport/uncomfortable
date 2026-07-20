@@ -134,6 +134,19 @@ button:not(:disabled) { cursor: pointer; }
   text-transform: uppercase;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
+.guest-streak-note {
+  display: block;
+  margin-top: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--color-accent-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.guest-streak-note[hidden] { display: none; }
 
 .coach-line {
   margin: 18px 0 0;
@@ -372,7 +385,10 @@ button:not(:disabled) { cursor: pointer; }
   align-items: center;
   gap: 6px;
   width: auto;
+  color: var(--color-accent-700);
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
 }
+.share-btn:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); border-color: var(--color-accent); }
 
 /* ---------- share modal ---------- */
 
