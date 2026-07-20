@@ -786,3 +786,13 @@ button:not(:disabled) { cursor: pointer; }
   color: color-mix(in srgb, var(--color-text) 65%, transparent);
 }
 .auth-switch .link-btn { margin-left: 4px; }
+.auth-footnote {
+  text-align: center;
+  font-size: 12px;
+  margin: 10px 0 0;
+}
+.auth-footnote a {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

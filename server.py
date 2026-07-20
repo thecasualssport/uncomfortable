@@ -46,6 +46,11 @@ def _env_secret(name, default=None):
 GOOGLE_CLIENT_ID = _env_secret('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = _env_secret('GOOGLE_CLIENT_SECRET')
 GOOGLE_REDIRECT_URI = _env('GOOGLE_REDIRECT_URI', 'http://localhost:5050/api/auth/google/callback')
+
+FACEBOOK_APP_ID = _env_secret('FACEBOOK_APP_ID')
+FACEBOOK_APP_SECRET = _env_secret('FACEBOOK_APP_SECRET')
+FACEBOOK_REDIRECT_URI = _env('FACEBOOK_REDIRECT_URI', 'http://localhost:5050/api/auth/facebook/callback')
+
 FRONTEND_URL = _env('FRONTEND_URL', 'http://localhost:5050/')
 SECRET_KEY = _env_secret('SECRET_KEY') or secrets.token_hex(32)
 
@@ -111,6 +116,7 @@ def init_db():
         'subscription_status': "TEXT NOT NULL DEFAULT 'free'",
         'stripe_customer_id': 'TEXT',
         'stripe_subscription_id': 'TEXT',
+        'facebook_sub': 'TEXT',
     }
     for col, decl in added_cols.items():
         if col not in existing_cols:
@@ -235,6 +241,10 @@ def api_signout():
     return jsonify({'ok': True})
 
 
+def _auth_error_redirect(code, provider):
+    return redirect(FRONTEND_URL + '?' + urlencode({'auth_error': code, 'auth_provider': provider}))
+
+
 # ---------------- Google OAuth ----------------
 
 @app.route('/api/auth/google/start')
@@ -262,16 +272,16 @@ def google_start():
 def google_callback():
     error = request.args.get('error')
     if error:
-        return redirect(FRONTEND_URL + '?auth_error=' + error)
+        return _auth_error_redirect(error, 'google')
 
     state = request.args.get('state')
     expected_state = session.pop('oauth_state', None)
     if not state or state != expected_state:
-        return redirect(FRONTEND_URL + '?auth_error=state_mismatch')
+        return _auth_error_redirect('state_mismatch', 'google')
 
     code = request.args.get('code')
     if not code:
-        return redirect(FRONTEND_URL + '?auth_error=missing_code')
+        return _auth_error_redirect('missing_code', 'google')
 
     token_resp = http_requests.post('https://oauth2.googleapis.com/token', data={
         'code': code,
@@ -282,7 +292,7 @@ def google_callback():
     }, timeout=10)
 
     if token_resp.status_code != 200:
-        return redirect(FRONTEND_URL + '?auth_error=token_exchange_failed')
+        return _auth_error_redirect('token_exchange_failed', 'google')
 
     tokens = token_resp.json()
     try:
@@ -290,14 +300,14 @@ def google_callback():
             tokens['id_token'], google_requests.Request(), GOOGLE_CLIENT_ID
         )
     except Exception:
-        return redirect(FRONTEND_URL + '?auth_error=invalid_token')
+        return _auth_error_redirect('invalid_token', 'google')
 
     google_sub = idinfo['sub']
     email = (idinfo.get('email') or '').lower()
     name = idinfo.get('name') or (email.split('@')[0] if email else 'there')
 
     if not email:
-        return redirect(FRONTEND_URL + '?auth_error=no_email')
+        return _auth_error_redirect('no_email', 'google')
 
     conn = get_db()
     row = conn.execute(
@@ -315,6 +325,97 @@ def google_callback():
             'INSERT INTO users (name, email, password_hash, provider, google_sub, created_at) '
             'VALUES (?, ?, NULL, ?, ?, ?)',
             (name, email, 'google', google_sub, datetime.datetime.utcnow().isoformat()),
+        )
+        uid = cur.lastrowid
+
+    conn.commit()
+    conn.close()
+
+    session.clear()
+    session['user_id'] = uid
+    return redirect(FRONTEND_URL)
+
+
+# ---------------- Facebook OAuth ----------------
+
+@app.route('/api/auth/facebook/start')
+def facebook_start():
+    if not FACEBOOK_APP_ID or not FACEBOOK_APP_SECRET:
+        return (
+            'Facebook OAuth is not configured on the server. '
+            'Set FACEBOOK_APP_ID and FACEBOOK_APP_SECRET in .env and restart the server.',
+            500,
+        )
+    state = secrets.token_urlsafe(24)
+    session['oauth_state'] = state
+    params = {
+        'client_id': FACEBOOK_APP_ID,
+        'redirect_uri': FACEBOOK_REDIRECT_URI,
+        'response_type': 'code',
+        'scope': 'email',
+        'state': state,
+    }
+    return redirect('https://www.facebook.com/v21.0/dialog/oauth?' + urlencode(params))
+
+
+@app.route('/api/auth/facebook/callback')
+def facebook_callback():
+    error = request.args.get('error')
+    if error:
+        return _auth_error_redirect(error, 'facebook')
+
+    state = request.args.get('state')
+    expected_state = session.pop('oauth_state', None)
+    if not state or state != expected_state:
+        return _auth_error_redirect('state_mismatch', 'facebook')
+
+    code = request.args.get('code')
+    if not code:
+        return _auth_error_redirect('missing_code', 'facebook')
+
+    token_resp = http_requests.get('https://graph.facebook.com/v21.0/oauth/access_token', params={
+        'client_id': FACEBOOK_APP_ID,
+        'client_secret': FACEBOOK_APP_SECRET,
+        'redirect_uri': FACEBOOK_REDIRECT_URI,
+        'code': code,
+    }, timeout=10)
+
+    access_token = token_resp.json().get('access_token') if token_resp.status_code == 200 else None
+    if not access_token:
+        return _auth_error_redirect('token_exchange_failed', 'facebook')
+
+    profile_resp = http_requests.get('https://graph.facebook.com/v21.0/me', params={
+        'fields': 'id,name,email',
+        'access_token': access_token,
+    }, timeout=10)
+
+    if profile_resp.status_code != 200:
+        return _auth_error_redirect('invalid_token', 'facebook')
+
+    profile = profile_resp.json()
+    facebook_sub = profile.get('id')
+    email = (profile.get('email') or '').lower()
+    name = profile.get('name') or (email.split('@')[0] if email else 'there')
+
+    if not email:
+        return _auth_error_redirect('no_email', 'facebook')
+
+    conn = get_db()
+    row = conn.execute(
+        'SELECT * FROM users WHERE facebook_sub = ? OR email = ?', (facebook_sub, email)
+    ).fetchone()
+
+    if row:
+        conn.execute(
+            'UPDATE users SET facebook_sub = ?, provider = ? WHERE id = ?',
+            (facebook_sub, 'facebook', row['id']),
+        )
+        uid = row['id']
+    else:
+        cur = conn.execute(
+            'INSERT INTO users (name, email, password_hash, provider, facebook_sub, created_at) '
+            'VALUES (?, ?, NULL, ?, ?, ?)',
+            (name, email, 'facebook', facebook_sub, datetime.datetime.utcnow().isoformat()),
         )
         uid = cur.lastrowid
 

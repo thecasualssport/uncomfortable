@@ -390,15 +390,17 @@
     const params = new URLSearchParams(location.search);
     const code = params.get('auth_error');
     if (!code) return;
+    const provider = providerLabel(params.get('auth_provider') || 'google');
     const messages = {
-      access_denied: 'Google sign-in was cancelled.',
-      state_mismatch: 'Something went wrong with Google sign-in — please try again.',
-      token_exchange_failed: 'Could not complete Google sign-in — please try again.',
-      invalid_token: 'Could not verify Google sign-in — please try again.',
-      no_email: 'That Google account has no email address — try a different account.',
+      access_denied: `${provider} sign-in was cancelled.`,
+      state_mismatch: `Something went wrong with ${provider} sign-in — please try again.`,
+      token_exchange_failed: `Could not complete ${provider} sign-in — please try again.`,
+      invalid_token: `Could not verify ${provider} sign-in — please try again.`,
+      no_email: `That ${provider} account has no email address — try a different account.`,
     };
-    state.authError = messages[code] || 'Google sign-in failed — please try again.';
+    state.authError = messages[code] || `${provider} sign-in failed — please try again.`;
     params.delete('auth_error');
+    params.delete('auth_provider');
     const rest = params.toString();
     history.replaceState({}, '', location.pathname + (rest ? '?' + rest : ''));
   }
@@ -1217,11 +1219,11 @@
     const btn = e.target.closest('.social-btn');
     if (!btn) return;
     const provider = btn.dataset.provider;
-    if (provider === 'google') {
-      window.location.href = '/api/auth/google/start';
+    if (provider === 'google' || provider === 'facebook') {
+      window.location.href = '/api/auth/' + provider + '/start';
       return;
     }
-    state.authError = `${providerLabel(provider)} sign-in isn't wired up yet — only Google is live right now.`;
+    state.authError = `${providerLabel(provider)} sign-in isn't wired up yet.`;
     render();
   });
 
