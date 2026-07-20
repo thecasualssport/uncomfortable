@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" fill="#f5ead8"/>
+
+  <rect x="228" y="40" width="130" height="230" rx="65" fill="#c67139"/>
+  <rect x="256" y="150" width="74" height="120" rx="37" fill="#f5ead8"/>
+
+  <rect x="666" y="40" width="130" height="230" rx="65" fill="#c67139"/>
+  <rect x="694" y="150" width="74" height="120" rx="37" fill="#f5ead8"/>
+
+  <rect x="88" y="130" width="848" height="800" rx="88" fill="#c67139"/>
+
+  <rect x="150" y="330" width="724" height="536" rx="12" fill="#f5ead8"/>
+
+  <text x="512" y="742" font-family="Georgia, 'Noto Serif', serif" font-weight="700" font-size="330" text-anchor="middle" fill="#201e1d">UC</text>
+
+  <path d="M866 838 L882 872 L916 888 L882 904 L866 938 L850 904 L816 888 L850 872 Z" fill="#c67139" opacity="0.55"/>
+</svg>
