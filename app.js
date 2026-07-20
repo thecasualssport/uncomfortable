@@ -111,6 +111,7 @@
     wheelRotation: 0,
     currentIndex: 0,
     rerollUsedToday: false,
+    rerollByDate: {}, // dateKey -> bool
     history: {}, // dateKey -> { index, title, failed }
     viewYear: new Date().getFullYear(),
     viewMonth: new Date().getMonth(),
@@ -178,8 +179,11 @@
     });
   }
 
-  function postReroll() {
-    return apiFetch('/api/history/reroll', { method: 'POST' });
+  function postReroll(dateKeyStr) {
+    return apiFetch('/api/history/reroll', {
+      method: 'POST',
+      body: JSON.stringify({ dateKey: dateKeyStr }),
+    });
   }
 
   function apiCreateCheckoutSession() {
@@ -200,7 +204,8 @@
     const data = await fetchHistory();
     const today = dateKey(new Date());
     state.history = data.history || {};
-    state.rerollUsedToday = !!data.rerollUsedToday;
+    state.rerollByDate = data.rerollByDate || {};
+    state.rerollUsedToday = !!state.rerollByDate[today];
     state.stage = 'idle';
     state.currentIndex = 0;
     const entry = state.history[today];
@@ -268,8 +273,10 @@
   async function signOut() {
     try { await apiSignOut(); } catch (e) {}
     clearInterval(adTimerId);
+    stopNextSpinCountdown();
     state.user = null;
     state.history = {};
+    state.rerollByDate = {};
     state.stage = 'idle';
     state.tab = 'home';
     state.selectedDayKey = null;
@@ -394,13 +401,15 @@
   async function handleReroll() {
     if (state.rerollUsedToday) return;
     state.resultError = '';
+    const today = dateKey(new Date());
     try {
-      await postReroll();
+      await postReroll(today);
     } catch (e) {
       state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
       render();
       return;
     }
+    state.rerollByDate = { ...state.rerollByDate, [today]: true };
     state.rerollUsedToday = true;
     state.stage = 'idle';
     render();
@@ -499,12 +508,6 @@
     render();
   }
 
-  function handleReturnToWheel() {
-    state.resultError = '';
-    state.stage = 'idle';
-    render();
-  }
-
   function goToHome() {
     state.tab = 'home';
     render();
@@ -555,6 +558,51 @@
     el.coachLine.textContent = coachLine;
   }
 
+  let nextSpinTimerId = null;
+
+  function msUntilNextMidnight() {
+    const now = new Date();
+    const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+    return nextMidnight.getTime() - now.getTime();
+  }
+
+  function formatCountdown(ms) {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function nextSpinLockHtml() {
+    return `
+      <div class="next-spin-lock">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2.5" y="6" width="9" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6V4.2a2.5 2.5 0 015 0V6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span>Next spin in <strong id="nextSpinTime">--:--:--</strong></span>
+      </div>`;
+  }
+
+  function stopNextSpinCountdown() {
+    if (nextSpinTimerId) { clearInterval(nextSpinTimerId); nextSpinTimerId = null; }
+  }
+
+  function startNextSpinCountdown() {
+    stopNextSpinCountdown();
+    const tick = () => {
+      const timeEl = document.getElementById('nextSpinTime');
+      if (!timeEl) { stopNextSpinCountdown(); return; }
+      const ms = msUntilNextMidnight();
+      if (ms <= 0) {
+        stopNextSpinCountdown();
+        loadUserData().then(render);
+        return;
+      }
+      timeEl.textContent = formatCountdown(ms);
+    };
+    tick();
+    nextSpinTimerId = setInterval(tick, 1000);
+  }
+
   function renderWheel() {
     const showWheel = state.stage === 'idle' || state.stage === 'spinning';
     el.wheelWrap.style.display = showWheel ? '' : 'none';
@@ -569,7 +617,7 @@
 
   function renderResultCard() {
     const showCard = state.stage === 'result' || state.stage === 'accepted' || state.stage === 'done' || state.stage === 'failed';
-    if (!showCard) { el.resultCard.innerHTML = ''; return; }
+    if (!showCard) { el.resultCard.innerHTML = ''; stopNextSpinCountdown(); return; }
 
     const pool = todaysPool();
     const challenge = pool[state.currentIndex] || pool[0];
@@ -603,8 +651,8 @@
           </div>
           <div class="done-actions">
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
-            <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
+          ${nextSpinLockHtml()}
         </div>`;
     } else if (state.stage === 'failed') {
       inner = `
@@ -612,8 +660,8 @@
           <div class="failed-label">Not today. That's alright — try again tomorrow.</div>
           <div class="failed-actions">
             <button class="pill pill-outline" data-action="goToCalendar">View Calendar</button>
-            <button class="pill pill-outline" data-action="returnToWheel">Return to Wheel</button>
           </div>
+          ${nextSpinLockHtml()}
         </div>`;
     }
 
@@ -629,6 +677,12 @@
         ${inner}
         ${errorBlock}
       </div>`;
+
+    if (state.stage === 'done' || state.stage === 'failed') {
+      startNextSpinCountdown();
+    } else {
+      stopNextSpinCountdown();
+    }
   }
 
   function renderCalendar() {
@@ -837,7 +891,6 @@
     else if (action === 'complete') handleComplete();
     else if (action === 'fail') handleFail();
     else if (action === 'goToCalendar') goToCalendar();
-    else if (action === 'returnToWheel') handleReturnToWheel();
   });
 
   el.calGrid.addEventListener('click', (e) => {

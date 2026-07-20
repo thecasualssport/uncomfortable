@@ -102,10 +102,6 @@ init_db()
 PREMIUM_STATUSES = {'active', 'trialing'}
 
 
-def today_key():
-    return datetime.date.today().isoformat()
-
-
 def user_json(row):
     return {
         'name': row['name'],
@@ -462,14 +458,18 @@ def api_history():
         r['date_key']: {'index': r['challenge_index'], 'title': r['title'], 'failed': bool(r['failed'])}
         for r in rows
     }
-    reroll_row = conn.execute(
-        'SELECT reroll_used FROM daily_state WHERE user_id = ? AND date_key = ?',
-        (user['id'], today_key()),
-    ).fetchone()
+    # Return every date's reroll flag (like `history` above) rather than
+    # resolving "today" server-side — the server's clock (UTC on most hosts)
+    # doesn't match the visitor's timezone, so "today" must be decided by
+    # the client, which already does this correctly for `history` itself.
+    reroll_rows = conn.execute(
+        'SELECT date_key, reroll_used FROM daily_state WHERE user_id = ?', (user['id'],)
+    ).fetchall()
+    reroll_by_date = {r['date_key']: bool(r['reroll_used']) for r in reroll_rows}
     conn.close()
     return jsonify({
         'history': history,
-        'rerollUsedToday': bool(reroll_row['reroll_used']) if reroll_row else False,
+        'rerollByDate': reroll_by_date,
     })
 
 
@@ -501,12 +501,16 @@ def api_history_day():
 @app.route('/api/history/reroll', methods=['POST'])
 def api_reroll():
     user = require_user_row()
-    dk = today_key()
+    data = request.get_json(force=True, silent=True) or {}
+    date_key = data.get('dateKey')
+    if not date_key:
+        return jsonify({'error': 'Missing dateKey.'}), 400
+
     conn = get_db()
     conn.execute(
         'INSERT INTO daily_state (user_id, date_key, reroll_used) VALUES (?, ?, 1) '
         'ON CONFLICT(user_id, date_key) DO UPDATE SET reroll_used = 1',
-        (user['id'], dk),
+        (user['id'], date_key),
     )
     conn.commit()
     conn.close()

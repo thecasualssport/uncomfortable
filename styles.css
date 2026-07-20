@@ -86,7 +86,8 @@ button { font: inherit; color: inherit; }
 .streak-num {
   font-family: var(--font-heading);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 46px;
+  line-height: 1;
   color: var(--color-accent-700);
 }
 .streak-label {
@@ -270,6 +271,21 @@ button { font: inherit; color: inherit; }
 .done-label { font-size: 14px; font-weight: 600; }
 .failed-label { font-size: 14px; font-weight: 600; color: var(--color-neutral-700); }
 .done-actions, .failed-actions { display: flex; gap: 10px; }
+.next-spin-lock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: 13px;
+}
+.next-spin-lock strong {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
 .pill-outline {
   border: 1px solid var(--color-divider);
   background: transparent;
