@@ -79,16 +79,25 @@
   // with — logged-in accounts already have one (email); guests get a
   // random id generated once and kept in localStorage so their set of 8
   // stays the same across a reload but differs from everyone else's.
+  function randomId() {
+    return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+  }
+
   function getClientId() {
     try {
       let id = localStorage.getItem(CLIENT_ID_KEY);
       if (!id) {
-        id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (Math.random().toString(36).slice(2) + Date.now().toString(36));
+        id = randomId();
         localStorage.setItem(CLIENT_ID_KEY, id);
       }
       return id;
     } catch (e) {
-      return 'anon';
+      // localStorage unavailable (private browsing, storage disabled, etc.) —
+      // fall back to an id that's at least unique per page load, so
+      // simultaneous visitors hitting this path don't all collide on the
+      // same literal fallback value and end up sharing one wheel.
+      if (!window.__ucFallbackClientId) window.__ucFallbackClientId = randomId();
+      return window.__ucFallbackClientId;
     }
   }
 
