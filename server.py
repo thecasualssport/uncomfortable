@@ -134,7 +134,7 @@ PREMIUM_STATUSES = {'active', 'trialing'}
 # entirely (and get ad-free rerolls, same as a paying subscriber) — a
 # manual allowlist rather than a real "admin" system since it's just for
 # testing the app extensively without fighting the daily gates.
-UNLIMITED_SPIN_EMAILS = {'jamesspporter@gmail.com'}
+UNLIMITED_SPIN_EMAILS = {'jamesspporter@gmail.com', 'jh767837@yahoo.com.au'}
 
 
 def user_json(row):
