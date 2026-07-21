@@ -569,7 +569,15 @@
 
   // ---------------- handlers ----------------
 
-  function handleSpin() {
+  function trackSpin(spinType, challengeTitle) {
+    if (typeof gtag !== 'function') return;
+    gtag('event', 'spin_wheel', {
+      spin_type: spinType,
+      item_id: challengeTitle,
+    });
+  }
+
+  function handleSpin(isReroll) {
     if (state.stage === 'spinning') return;
     if (state.history[dateKey(new Date())]) {
       openSpinLockModal();
@@ -591,6 +599,7 @@
     setTimeout(() => {
       state.stage = 'result';
       state.currentIndex = targetIndex;
+      trackSpin(isReroll ? 'reroll' : 'initial', pool[targetIndex].title);
       render();
     }, 3300);
   }
@@ -621,7 +630,7 @@
     state.rerollUsedToday = true;
     state.stage = 'idle';
     render();
-    handleSpin();
+    handleSpin(true);
   }
 
   function startRerollFlow() {
@@ -1331,7 +1340,7 @@
 
   // ---------------- wire up ----------------
 
-  el.spinBtn.addEventListener('click', handleSpin);
+  el.spinBtn.addEventListener('click', () => handleSpin());
   el.tabHome.addEventListener('click', goToHome);
   el.tabCalendar.addEventListener('click', goToCalendar);
   el.prevMonth.addEventListener('click', prevMonth);
