@@ -637,7 +637,15 @@
     }
     state.stage = 'idle';
     render();
-    handleSpin(true);
+    // The wheel was hidden (display:none) while the result card was showing.
+    // Un-hiding it and setting its new rotation in the same synchronous tick
+    // gives the CSS transition nothing to animate from — the browser never
+    // paints the "visible at rest" frame in between, so it just snaps to
+    // the final position instantly. Waiting two animation frames guarantees
+    // that resting frame actually gets painted first.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => handleSpin(true));
+    });
   }
 
   function startRerollFlow() {
