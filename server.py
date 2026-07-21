@@ -73,6 +73,12 @@ app.config.update(
     # Browsers refuse to send Secure cookies over plain http://localhost, so
     # only require HTTPS-only cookies once FRONTEND_URL is actually https.
     SESSION_COOKIE_SECURE=FRONTEND_URL.startswith('https://'),
+    # Without this, Flask issues a session-only cookie (no Expires/Max-Age),
+    # which most browsers wipe on full browser close — forcing a re-login
+    # every time. session.permanent = True (set at each login below) makes
+    # the cookie live for this long instead, so signing in once keeps you
+    # signed in across visits.
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(days=90),
 )
 
 
@@ -216,6 +222,7 @@ def api_signup():
 
     session.clear()
     session['user_id'] = uid
+    session.permanent = True
     return jsonify({'user': {'name': name, 'email': email, 'provider': 'password'}})
 
 
@@ -239,6 +246,7 @@ def api_signin():
 
     session.clear()
     session['user_id'] = row['id']
+    session.permanent = True
     return jsonify({'user': user_json(row)})
 
 
@@ -340,6 +348,7 @@ def google_callback():
 
     session.clear()
     session['user_id'] = uid
+    session.permanent = True
     return redirect(FRONTEND_URL)
 
 
@@ -431,6 +440,7 @@ def facebook_callback():
 
     session.clear()
     session['user_id'] = uid
+    session.permanent = True
     return redirect(FRONTEND_URL)
 
 
