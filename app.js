@@ -577,9 +577,13 @@
     });
   }
 
+  function hasUnlimitedSpins() {
+    return !!(state.user && state.user.unlimitedSpins);
+  }
+
   function handleSpin(isReroll) {
     if (state.stage === 'spinning') return;
-    if (state.history[dateKey(new Date())]) {
+    if (state.history[dateKey(new Date())] && !hasUnlimitedSpins()) {
       openSpinLockModal();
       return;
     }
@@ -611,31 +615,35 @@
   }
 
   async function handleReroll() {
-    if (state.rerollUsedToday) return;
+    const unlimited = hasUnlimitedSpins();
+    if (state.rerollUsedToday && !unlimited) return;
     state.resultError = '';
-    const today = dateKey(new Date());
-    if (state.isGuest) {
-      state.rerollByDate = { ...state.rerollByDate, [today]: true };
-      saveGuestReroll(state.rerollByDate);
-    } else {
-      try {
-        await postReroll(today);
-      } catch (e) {
-        state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
-        render();
-        return;
+    if (!unlimited) {
+      const today = dateKey(new Date());
+      if (state.isGuest) {
+        state.rerollByDate = { ...state.rerollByDate, [today]: true };
+        saveGuestReroll(state.rerollByDate);
+      } else {
+        try {
+          await postReroll(today);
+        } catch (e) {
+          state.resultError = e.message || 'Couldn’t save that — check your connection and try again.';
+          render();
+          return;
+        }
+        state.rerollByDate = { ...state.rerollByDate, [today]: true };
       }
-      state.rerollByDate = { ...state.rerollByDate, [today]: true };
+      state.rerollUsedToday = true;
     }
-    state.rerollUsedToday = true;
     state.stage = 'idle';
     render();
     handleSpin(true);
   }
 
   function startRerollFlow() {
-    if (state.rerollUsedToday) return;
-    if (state.user && state.user.isPremium) {
+    const unlimited = hasUnlimitedSpins();
+    if (state.rerollUsedToday && !unlimited) return;
+    if (unlimited || (state.user && state.user.isPremium)) {
       handleReroll();
       return;
     }
@@ -1003,9 +1011,10 @@
     const kicker = state.stage === 'done' ? 'Completed' : state.stage === 'failed' ? 'Not Completed' : 'Today’s Challenge';
 
     const isPremium = !!(state.user && state.user.isPremium);
+    const unlimited = hasUnlimitedSpins();
     let rerollLabel = 'Reroll';
-    if (state.rerollUsedToday) rerollLabel = 'Reroll used';
-    else if (!isPremium) rerollLabel = 'Reroll (watch ad)';
+    if (state.rerollUsedToday && !unlimited) rerollLabel = 'Reroll used';
+    else if (!isPremium && !unlimited) rerollLabel = 'Reroll (watch ad)';
 
     const shareIconBtn = `
       <button class="pill share-btn" data-action="share">
@@ -1022,7 +1031,7 @@
       inner = `
         <div class="card-actions">
           <button class="pill pill-accept" data-action="accept">Accept Challenge</button>
-          <button class="pill pill-reroll" data-action="reroll" ${state.rerollUsedToday ? 'disabled' : ''}>${escapeHtml(rerollLabel)}</button>
+          <button class="pill pill-reroll" data-action="reroll" ${(state.rerollUsedToday && !unlimited) ? 'disabled' : ''}>${escapeHtml(rerollLabel)}</button>
         </div>
         <div class="secondary-actions">${shareIconBtn}</div>`;
     } else if (state.stage === 'accepted') {

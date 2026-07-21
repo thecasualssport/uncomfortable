@@ -130,6 +130,12 @@ init_db()
 
 PREMIUM_STATUSES = {'active', 'trialing'}
 
+# Accounts here skip the daily spin lock and the once-a-day reroll limit
+# entirely (and get ad-free rerolls, same as a paying subscriber) — a
+# manual allowlist rather than a real "admin" system since it's just for
+# testing the app extensively without fighting the daily gates.
+UNLIMITED_SPIN_EMAILS = {'jamesspporter@gmail.com'}
+
 
 def user_json(row):
     return {
@@ -138,6 +144,7 @@ def user_json(row):
         'provider': row['provider'],
         'isPremium': row['subscription_status'] in PREMIUM_STATUSES,
         'subscriptionStatus': row['subscription_status'],
+        'unlimitedSpins': row['email'] in UNLIMITED_SPIN_EMAILS,
     }
 
 
