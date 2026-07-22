@@ -89,7 +89,7 @@
     { id: 'ice-bucket-hands-and-feet', title: 'Ice Bucket Hands and Feet', wheelLabel: 'Ice Bucket', description: 'Plunge your hands and feet into a bucket of ice water for 3 full minutes.' },
     { id: 'jump-into-natural-water', title: 'Jump Into Natural Water', wheelLabel: 'Cold Water Jump', description: 'Jump into a natural body of water — ocean, lake, or river — early in the morning.' },
     { id: 'non-dominant-hand-all-day', title: 'Non-Dominant Hand All Day', wheelLabel: 'Wrong Hand Day', description: 'Spend a whole day using your non-dominant hand for everything — eating, brushing teeth, opening doors.' },
-    { id: 'sit-cross-legged-for-an-hour', title: 'Sit Cross-Legged for an Hour', wheelLabel: 'Cross-Legged', description: 'Sit cross-legged on the floor for 1 hour while working or watching something.' },
+    { id: 'sit-cross-legged-for-an-hour', title: 'Sit Cross-Legged for an Hour', wheelLabel: 'Sit Cross-Leg', description: 'Sit cross-legged on the floor for 1 hour while working or watching something.' },
     { id: 'blindfolded-at-home', title: 'Blindfolded at Home', wheelLabel: 'Blindfold Chores', description: 'Blindfold yourself for 2 hours at home while trying to do basic chores.' },
     { id: 'wear-a-weighted-backpack', title: 'Wear a Weighted Backpack', wheelLabel: 'Weighted Pack', description: 'Spend 4 hours wearing a heavy backpack or weights as you go about your day at home.' },
     { id: 'dont-sit-for-four-hours', title: 'Don\'t Sit for Four Hours', wheelLabel: 'No Sitting', description: 'Do not sit down for a full 4-hour block of time during the day.' },
@@ -133,7 +133,7 @@
     { id: 'watch-the-clouds', title: 'Watch the Clouds', wheelLabel: 'Cloud Watching', description: 'Sit outside for 45 minutes just watching the clouds move.' },
     { id: 'work-only-internet', title: 'Work-Only Internet', wheelLabel: 'Work Net Only', description: 'Do not use the internet for anything other than mandatory work tasks today.' },
     { id: 'a-computer-free-weekend', title: 'A Computer-Free Weekend', wheelLabel: 'No Computer', description: 'Keep your computer closed for the entire weekend.' },
-    { id: 'unsubscribe-from-50-newsletters', title: 'Unsubscribe From 50 Newsletters', wheelLabel: '50 Unsubscribes', description: 'Unsubscribe from 50 email newsletters in one sitting.' },
+    { id: 'unsubscribe-from-50-newsletters', title: 'Unsubscribe From 50 Newsletters', wheelLabel: '50 Unsubs', description: 'Unsubscribe from 50 email newsletters in one sitting.' },
     { id: 'curate-your-feed-ruthlessly', title: 'Curate Your Feed Ruthlessly', wheelLabel: 'Curate Feed', description: 'Unfollow every account on social media that doesn\'t directly inspire or educate you.' },
     { id: 'three-days-of-print-only', title: 'Three Days of Print Only', wheelLabel: 'Print Only', description: 'Spend 3 days reading only physical print — books, newspapers — instead of digital text.' },
     { id: 'block-your-top-three-sites', title: 'Block Your Top Three Sites', wheelLabel: 'Block Top Sites', description: 'Block your top 3 most-visited websites for a week using a site blocker.' },
@@ -627,6 +627,25 @@
     return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  const WHEEL_LABEL_MAX_LINE_CHARS = 11;
+
+  function wrapWheelLabel(label) {
+    const words = label.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+      const candidate = line ? line + ' ' + word : word;
+      if (line && candidate.length > WHEEL_LABEL_MAX_LINE_CHARS) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = candidate;
+      }
+    });
+    if (line) lines.push(line);
+    return lines;
+  }
+
   // ---------------- calendar export (.ics) ----------------
   //
   // Generates a standard iCalendar file with a reminder alarm, which any
@@ -1065,7 +1084,8 @@
     const anglePerSeg = 360 / pool.length;
     el.wheelLabels.innerHTML = pool.map((c, i) => {
       const angle = i * anglePerSeg + anglePerSeg / 2;
-      return `<div class="wheel-label" style="transform:rotate(${angle}deg) translateY(-108px)">${escapeHtml(c.wheelLabel)}</div>`;
+      const lines = wrapWheelLabel(c.wheelLabel).map((line) => escapeHtml(line)).join('<br>');
+      return `<div class="wheel-label" style="transform:rotate(${angle}deg) translateY(-100px)">${lines}</div>`;
     }).join('');
   }
 
