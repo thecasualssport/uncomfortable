@@ -171,6 +171,29 @@ def require_user_row():
     return row
 
 
+# ---------------- apex -> www redirect ----------------
+#
+# The apex domain (uncomfortablecalendar.com, no www) currently reaches this
+# app only if DNS points it here directly — historically it went through
+# GoDaddy's domain forwarding instead, which only forwards the bare "/" and
+# 404s on every other path (including /ads.txt, which is why Google AdSense
+# couldn't verify it against the apex domain). Once DNS points the apex at
+# Render too, this makes every path redirect to the canonical www host with
+# the path preserved — ads.txt crawlers (and browsers) follow the redirect
+# and land on the real file instead of a dead end.
+APEX_HOST = 'uncomfortablecalendar.com'
+CANONICAL_HOST = 'www.uncomfortablecalendar.com'
+
+
+@app.before_request
+def redirect_apex_to_www():
+    if request.host == APEX_HOST:
+        target = f'https://{CANONICAL_HOST}{request.path}'
+        if request.query_string:
+            target += '?' + request.query_string.decode('utf-8')
+        return redirect(target, code=301)
+
+
 # ---------------- static frontend ----------------
 
 @app.route('/')
