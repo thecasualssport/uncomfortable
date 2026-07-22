@@ -120,14 +120,71 @@
     };
   }
 
-  function dailyChallenges(key) {
-    const rng = mulberry32(hashStr(key));
+  // The wheel is organized into fixed-length "cycles" of consecutive days —
+  // each cycle is one shuffle of the full pool, sliced into non-overlapping
+  // 8-item windows (one per day), so within a cycle no challenge can repeat.
+  // Consecutive cycles are chained: each cycle's shuffle is resolved (retried
+  // with a salt if needed) so its first day never repeats the previous
+  // cycle's last day — guaranteeing no day ever repeats what the same person
+  // saw the day before, not just "usually different."
+  const CYCLE_EPOCH = new Date('2026-01-01T00:00:00');
+  const PER_CYCLE = Math.ceil(CHALLENGE_POOL.length / 8);
+  const cyclePoolCache = {};
+
+  function rawCycleShuffle(cycleIndex, identitySuffix, salt) {
+    const seedStr = 'cycle' + cycleIndex + identitySuffix + (salt ? '-' + salt : '');
+    const rng = mulberry32(hashStr(seedStr));
     const pool = CHALLENGE_POOL.slice();
     for (let i = pool.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
-    return pool.slice(0, 8);
+    const padNeeded = PER_CYCLE * 8 - pool.length;
+    return pool.concat(pool.slice(0, padNeeded));
+  }
+
+  function resolveCyclePool(targetCycleIndex, identitySuffix) {
+    const target = Math.max(0, targetCycleIndex);
+    const targetKey = target + identitySuffix;
+    if (cyclePoolCache[targetKey]) return cyclePoolCache[targetKey];
+
+    let prevPadded = null;
+    for (let i = 0; i <= target; i++) {
+      const cacheKey = i + identitySuffix;
+      if (cyclePoolCache[cacheKey]) {
+        prevPadded = cyclePoolCache[cacheKey];
+        continue;
+      }
+      let padded;
+      if (i === 0) {
+        padded = rawCycleShuffle(i, identitySuffix, 0);
+      } else {
+        const avoidIds = new Set(prevPadded.slice((PER_CYCLE - 1) * 8, PER_CYCLE * 8).map((c) => c.id));
+        let salt = 0;
+        do {
+          padded = rawCycleShuffle(i, identitySuffix, salt);
+          salt++;
+        } while (padded.slice(0, 8).some((c) => avoidIds.has(c.id)) && salt <= 50);
+      }
+      cyclePoolCache[cacheKey] = padded;
+      prevPadded = padded;
+    }
+    return cyclePoolCache[targetKey];
+  }
+
+  // `key` is "YYYY-MM-DD|identity".
+  function dailyChallenges(key) {
+    const sep = key.indexOf('|');
+    const dateStr = sep === -1 ? key : key.slice(0, sep);
+    const identitySuffix = sep === -1 ? '' : key.slice(sep);
+
+    const d = new Date(dateStr + 'T00:00:00');
+    const dayIndex = isNaN(d.getTime()) ? 0 : Math.round((d.getTime() - CYCLE_EPOCH.getTime()) / DAY_MS);
+    const cycleIndex = Math.floor(dayIndex / PER_CYCLE);
+    const posInCycle = ((dayIndex % PER_CYCLE) + PER_CYCLE) % PER_CYCLE;
+
+    const padded = resolveCyclePool(cycleIndex, identitySuffix);
+    return padded.slice(posInCycle * 8, posInCycle * 8 + 8);
   }
 
   function escapeHtml(str) {
